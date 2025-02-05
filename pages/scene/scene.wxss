@@ -1,0 +1,78 @@
+/* 页面整体样式 */
+.container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    background-color: #f8f9fa;
+  }
+  
+  /* 标题栏 */
+  .header {
+    text-align: center;
+    font-size: 36rpx;
+    font-weight: bold;
+    padding: 20rpx;
+    background: white;
+    border-bottom: 1px solid #ddd;
+  }
+  
+  /* 聊天消息容器 */
+  .chat-container {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20rpx;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  /* 消息样式 */
+  .message {
+    max-width: 80%;
+    padding: 16rpx;
+    margin: 10rpx;
+    border-radius: 12rpx;
+    font-size: 32rpx;
+    word-break: break-word;
+  }
+  
+  /* 用户消息 */
+  .user {
+    align-self: flex-end;
+    background-color: #e0f2fe;
+  }
+  
+  /* 机器人消息 */
+  .bot {
+    align-self: flex-start;
+    background-color: #ffffff;
+    border: 1px solid #ddd;
+  }
+  
+  /* 输入框容器 */
+  .input-container {
+    display: flex;
+    padding: 10rpx;
+    border-top: 1px solid #ddd;
+    background: white;
+    align-items: center;
+  }
+  
+  /* 输入框 */
+  .input-box {
+    flex: 1;
+    padding: 10rpx;
+    border: 1px solid #ddd;
+    border-radius: 8rpx;
+    font-size: 32rpx;
+  }
+  
+  /* 发送按钮 */
+  .send-btn {
+    margin-left: 10rpx;
+    background: #007aff;
+    color: white;
+    font-size: 32rpx;
+    padding: 10rpx 20rpx;
+    border-radius: 8rpx;
+  }
+  

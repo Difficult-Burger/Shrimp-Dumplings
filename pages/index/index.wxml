@@ -1,0 +1,15 @@
+<view class="container">
+  <view class="header">首页</view>
+  <view class="list">
+    <block wx:for="{{items}}" wx:key="id">
+      <view 
+        class="item" 
+        bindtap="goToScene"
+        data-scenario="{{item.scenario}}"
+        data-prompt="{{item.prompt}}"
+      >
+        {{item.title}}
+      </view>
+    </block>
+  </view>
+</view>

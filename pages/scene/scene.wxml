@@ -1,0 +1,26 @@
+<view class="container">
+  <!-- 顶部标题（已移除） -->
+  <!-- <view class="header">Scene1</view> -->
+
+  <!-- 聊天消息列表 -->
+  <view class="chat-container">
+    <block wx:for="{{messages}}" wx:key="index">
+      <view class="message {{item.type}}">
+        <text>{{item.text}}</text>
+      </view>
+    </block>
+  </view>
+
+  <!-- 输入框和发送按钮 -->
+  <view class="input-container">
+    <textarea
+      class="input-box"
+      placeholder="输入消息..."
+      bindinput="handleInput"
+      auto-height
+      maxlength="140"
+      value="{{inputValue}}"
+    ></textarea>
+    <button class="send-btn" bindtap="sendMessage">发送</button>
+  </view>
+</view>

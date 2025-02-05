@@ -1,0 +1,18 @@
+{
+    "pages": [
+        "pages/index/index",
+        "pages/scene/scene"
+    ],
+    "window": {
+        "navigationBarTitleText": "首页",
+        "backgroundColor": "#f8f9fa"
+    },
+    "networkTimeout": {
+        "request": 60000
+    },
+    "permission": {
+        "scope.userLocation": {
+            "desc": "你的位置信息将用于场景定位"
+        }
+    }
+}
