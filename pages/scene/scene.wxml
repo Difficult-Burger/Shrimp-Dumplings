@@ -13,14 +13,15 @@
 
   <!-- 输入框和发送按钮 -->
   <view class="input-container">
-    <textarea
+    <input
       class="input-box"
-      placeholder="输入消息..."
+      placeholder="輸入訊息..."
+      placeholder-class="placeholder-style"
       bindinput="handleInput"
-      auto-height
-      maxlength="140"
+      bindconfirm="sendMessage"
+      maxlength="200"
       value="{{inputValue}}"
-    ></textarea>
+    ></input>
     <button class="send-btn" bindtap="sendMessage">发送</button>
   </view>
 </view>

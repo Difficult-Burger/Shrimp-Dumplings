@@ -1,4 +1,5 @@
-const LOCAL_IP = '192.168.56.1'; 
+const LOCAL_IP = '10.8.17.75'; 
+const BASE_URL = 'https://20040415.xyz';
 
 // 新增封装：返回 Promise 的 wx.request
 function requestPromise(options) {
@@ -26,10 +27,13 @@ Page({
       inputValue: ""
     },
   
+    // 用于存储当前的 socketTask
+    socketTask: null,
+  
     onLoad(options) {
       console.log("当前场景参数:", options);
       wx.request({
-        url: `http://${LOCAL_IP}:5000/health`,
+        url: `${BASE_URL}/health`,
         success: () => console.log("服务正常"),
         fail: () => console.log("服务不可用")
       });
@@ -46,7 +50,7 @@ Page({
       wx.showLoading({ title: '初始化中...' });
       try {
          const res = await requestPromise({
-           url: `http://${LOCAL_IP}:5000/init`,
+           url: `${BASE_URL}/init`,
            method: 'POST',
            data: { prompt: this.data.systemPrompt },
            timeout: 70000
@@ -73,79 +77,90 @@ Page({
   
     // 处理输入框输入
     handleInput(e) {
-      this.setData({ inputValue: e.detail.value });
+      const value = e.detail.value.replace(/\s+/g, ' ').trimStart();  // 合并连续空格
+      this.setData({ inputValue: value });
     },
   
-    // 发送消息
-    async sendMessage() {
-      try {
-        const { inputValue, messages } = this.data;
-        if (!inputValue.trim()) return;
-  
-        // 用户消息
-        this.setData({
-          messages: [...messages, { text: inputValue, type: "user" }],
-          inputValue: ""
-        });
-  
-        // 调用后端API（增加加载状态）
-        wx.showLoading({ title: '发送中...', mask: true });
-        
-        const res = await requestPromise({
-          url: `http://${LOCAL_IP}:5000/chat`,
-          method: 'POST',
-          data: {
-            scenario: this.data.currentScenario,
-            message: inputValue,
-            history: this.data.messages
-          },
-          timeout: 70000  // 调整为70秒
-        });
-  
-        wx.hideLoading();
-  
-        // 处理错误响应
-        if (res.statusCode !== 200) {
-          const errorMsg = res.data?.error || `请求失败: ${res.statusCode}`;
-          throw new Error(errorMsg);
-        }
-  
-        // AI回复
-        if (res.data.response) {
-          let responseText = res.data.response;
-          // 处理截断提示
-          if (res.data.warning === 'reply_truncated') {
-            responseText += '\n（系统提示：回复因长度限制被截断）';
+    // 统一管理 WebSocket 连接：若存在未关闭的连接，则先关闭
+    closeSocketIfNeeded() {
+      if (this.socketTask) {
+        wx.closeSocket({
+          complete: () => {
+            console.log('上次连接已关闭');
+            this.socketTask = null;
           }
-          
-          this.setData({
-            messages: [...this.data.messages, { 
-              text: responseText,
-              type: "bot" 
-            }]
-          });
-        }
-      } catch (error) {
-        wx.hideLoading();
-        console.error('发送消息出错:', error);
-        
-        // 更友好的错误提示
-        let errorMsg = (error.message || error.errMsg || '未知错误');
-        if ((error.message || '').includes('timed out') || (error.errMsg || '').includes('timeout')) {
-          errorMsg = '回复超时，请稍后再试';
-        } else if ((error.message || '').includes('500')) {
-          errorMsg = '服务暂时不可用';
-        }
-
-        wx.showToast({ 
-          title: `发送失败: ${errorMsg}`,
-          icon: 'none',
-          duration: 3000
         });
-        
-        // 保留用户最后输入
-        this.setData({ inputValue: this.data.inputValue });
       }
+    },
+  
+    // 发送消息，并实时显示 AI 回复
+    sendMessage() {
+      const { inputValue, messages, currentScenario } = this.data;
+      if (!inputValue.trim()) return;
+  
+      // 添加用户消息
+      this.setData({
+        messages: [...messages, { text: inputValue, type: "user" }],
+        inputValue: ""
+      }, () => {  // 添加回调函数
+        // 在这里执行 WebSocket 连接和消息发送
+        this.connectAndSendMessage();
+      });
+    },
+  
+    // 新增独立方法
+    connectAndSendMessage() {
+      const { currentScenario, messages } = this.data;
+      // 这里获取的是更新后的 messages（不包含刚添加的用户消息）
+      const payload = {
+        scenario: currentScenario,
+        message: this.data.inputValue, // 此时已清空，需要保存旧值
+        history: messages.slice(0, -1)  // 排除刚添加的用户消息
+      };
+      // 如果有未关闭的连接，先关闭它
+      this.closeSocketIfNeeded();
+  
+      // 先建立连接
+      this.socketTask = wx.connectSocket({
+        url: `wss://flask-65op-137747-10-1339695968.sh.run.tcloudbase.com/ws/chat`,
+        header: {
+          'Sec-WebSocket-Extensions': 'null'  // 显式禁用扩展
+        }
+      });
+  
+      // 再注册事件
+      this.socketTask.onOpen(() => {
+        console.log('连接已建立');
+        this.socketTask.send({
+          data: JSON.stringify(payload),
+          success: () => console.log("消息发送成功"),
+          fail: (err) => console.error("消息发送失败", err)
+        });
+      });
+  
+      this.socketTask.onMessage((res) => {
+        try {
+          // 修改后：直接使用文本内容
+          const content = res.data;
+          if (content) {
+            let msgs = this.data.messages;
+            if (msgs.length === 0 || msgs[msgs.length - 1].type !== "bot") {
+              msgs.push({ text: content, type: "bot" });
+            } else {
+              msgs[msgs.length - 1].text += content;
+            }
+            this.setData({ messages: msgs });
+          }
+        } catch (e) {
+          console.error("消息解析失败:", e);
+        }
+      });
+  
+      wx.onSocketError((res) => {
+        console.error("WebSocket 错误详情:", res);
+        wx.showToast({ title: `Socket错误: ${res.errMsg}`, icon: 'none', duration: 3000 });
+        wx.closeSocket(); // 出错时关闭连接
+      });
     }
   });
   

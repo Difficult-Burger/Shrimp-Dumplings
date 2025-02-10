@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, abort
 import requests
 from dotenv import load_dotenv
 import os
@@ -6,14 +6,20 @@ from flask_cors import CORS
 import time
 from datetime import datetime
 import traceback
+import json
+from flask_sock import Sock
 
-# 加载环境变量
-load_dotenv(override=True)  # 添加强制覆盖
-DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY") or os.environ.get("DEEPSEEK_API_KEY")  # 双重验证
+# 修改后 (直接读取系统环境变量)
+DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
+if not DEEPSEEK_API_KEY:
+    raise ValueError("未配置 DEEPSEEK_API_KEY 环境变量")
+
+load_dotenv()
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})  # 允许所有域名
 DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
+sock = Sock(app)
 
 # 场景提示词模板
 SCENARIO_PROMPTS = {
@@ -221,5 +227,104 @@ def health_check():
             "message": str(e)
         }), 500
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True) 
+@sock.route('/ws/chat')
+def chat_socket(ws):
+    try:
+        # 强制设置无扩展的响应头
+        ws.handshake_response = lambda: (
+            "HTTP/1.1 101 Switching Protocols\r\n"
+            "Upgrade: websocket\r\n"
+            "Connection: Upgrade\r\n"
+            f"Sec-WebSocket-Accept: {ws._get_accept_hash()}\r\n"
+            "\r\n"
+        )
+        
+        # 检查并拒绝压缩扩展请求
+        if 'permessage-deflate' in ws.environ.get('HTTP_SEC_WEBSOCKET_EXTENSIONS', ''):
+            print("检测到不支持的压缩扩展请求")
+            abort(400, 'Compression not supported')
+            
+        while True:
+            data = ws.receive()
+            # 增加空消息检查
+            if not data or data == 'ping':  # 合并判断条件
+                if data == 'ping':
+                    ws.send('pong')
+                continue
+            # 增加内容非空检查
+            try:
+                req_data = json.loads(data)
+                if not req_data.get('message'):
+                    ws.send(json.dumps({"error": "消息内容不能为空"}))
+                    continue
+            except json.JSONDecodeError:
+                continue  # 已存在的错误处理
+
+            scenario = req_data.get('scenario')
+            user_message = req_data.get('message')
+            history = req_data.get('history', [])
+            
+            system_prompt = SCENARIO_PROMPTS.get(scenario, "請使用簡單粵語進行對話")
+            
+            headers = {
+                "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                 "model": "deepseek-chat",
+                 "messages": (
+                     [{"role": "system", "content": system_prompt}] +
+                     build_conversation_history(history) +
+                     [{"role": "user", "content": user_message}]
+                 ),
+                 "temperature": 0.7,
+                 "max_tokens": 200,
+                 "stream": True  # 启用流式输出
+            }
+            try:
+                r = requests.post(DEEPSEEK_API_URL, headers=headers, json=payload, stream=True, timeout=(5, 120))
+                buffer = ""  # 新增缓冲区处理不完整数据
+                for line in r.iter_content(chunk_size=1024):
+                    buffer += line.decode('utf-8')
+                    while '\n' in buffer:
+                        line, buffer = buffer.split('\n', 1)
+                        if line.startswith('data:'):
+                            try:
+                                chunk = json.loads(line[len('data:'):].strip())
+                                if chunk.get('choices'):
+                                    content = chunk['choices'][0]['delta'].get('content', '')
+                                    if content:
+                                        # 直接发送文本内容
+                                        ws.send(content)
+                            except Exception as chunk_error:
+                                print(f"块处理错误: {chunk_error}")
+                # 发送结束信号
+                ws.send(json.dumps({"status": "done"}))
+            except Exception as e:
+                print(f"流式请求错误: {traceback.format_exc()}")
+                ws.send(json.dumps({"error": str(e)}))
+            
+    except Exception as e:
+        print(f"WebSocket异常: {traceback.format_exc()}")
+    finally:
+        print("WebSocket连接关闭")
+
+@app.before_request
+def log_request_info():
+    if request.path == '/ws/chat':
+        print(f"\n=== WebSocket 握手请求头 ===")
+        print("Connection:", request.headers.get('Connection'))
+        print("Upgrade:", request.headers.get('Upgrade'))
+        print("Sec-WebSocket-Key:", request.headers.get('Sec-WebSocket-Key'))
+
+if __name__ == "__main__":
+    # 更新默认端口为 5000（与 Nginx 代理配置对应）
+    port = int(os.getenv("PORT", 5000))
+    # 去掉 ssl_context 参数，使用纯 HTTP 方式启动
+    app.run(host="0.0.0.0", port=port, threaded=False)
+
+# 在Flask应用配置中添加
+app.config['SOCK_SERVER_OPTIONS'] = {
+    'ping_interval': 25,  # 与微信心跳间隔一致
+    'ping_timeout': 5
+} 
