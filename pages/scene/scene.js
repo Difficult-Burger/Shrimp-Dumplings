@@ -122,7 +122,7 @@ Page({
   
       // 先建立连接
       this.socketTask = wx.connectSocket({
-        url: `wss://flask-65op-137747-10-1339695968.sh.run.tcloudbase.com/ws/chat`,
+        url: `wss://20040415.xyz/ws/chat`,
         header: {
           'Sec-WebSocket-Extensions': 'null'  // 显式禁用扩展
         }
@@ -161,6 +161,34 @@ Page({
         wx.showToast({ title: `Socket错误: ${res.errMsg}`, icon: 'none', duration: 3000 });
         wx.closeSocket(); // 出错时关闭连接
       });
-    }
+    },
+  
+    // 新增 playTts 方法
+    playTts(e) {
+      const text = e.currentTarget.dataset.text;
+      wx.showLoading({ title: '生成语音中...' });
+      wx.request({
+        url: `${BASE_URL}/tts`,
+        method: "POST",
+        data: { text: text },
+        responseType: "arraybuffer",  // 以二进制格式接收
+        success: (res) => {
+          wx.hideLoading();
+          if (res.statusCode === 200) {
+            const base64 = wx.arrayBufferToBase64(res.data);
+            const src = "data:audio/mpeg;base64," + base64;
+            const innerAudioContext = wx.createInnerAudioContext();
+            innerAudioContext.src = src;
+            innerAudioContext.play();
+          } else {
+            wx.showToast({ title: "语音生成失败", icon: "none" });
+          }
+        },
+        fail: (err) => {
+          wx.hideLoading();
+          wx.showToast({ title: "语音生成失败", icon: "none" });
+        }
+      });
+    },
   });
   

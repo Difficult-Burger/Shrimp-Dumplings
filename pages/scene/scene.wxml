@@ -5,8 +5,16 @@
   <!-- 聊天消息列表 -->
   <view class="chat-container">
     <block wx:for="{{messages}}" wx:key="index">
-      <view class="message {{item.type}}">
-        <text>{{item.text}}</text>
+      <view class="message-box">
+        <block wx:if="{{item.type=='bot'}}">
+          <!-- 新增回复框，点击后播放语音 -->
+          <view class="tts-box" bindtap="playTts" data-index="{{index}}" data-text="{{item.text}}">
+            播放语音
+          </view>
+        </block>
+        <view class="message {{item.type}}">
+          <text>{{item.text}}</text>
+        </view>
       </view>
     </block>
   </view>

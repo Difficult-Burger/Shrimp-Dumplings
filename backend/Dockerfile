@@ -18,11 +18,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 将所有代码复制到工作目录
 COPY . .
 
-# 设置环境变量（微信云托管会注入 PORT 变量）
 ENV PORT=5000
 
 # 暴露端口
-EXPOSE 80
+EXPOSE 5000
 
 # 新增 gevent 启动方式
 CMD ["gunicorn", "--worker-class=geventwebsocket.gunicorn.workers.GeventWebSocketWorker", "-b", "0.0.0.0:5000", "app:app"]
+
+HEALTHCHECK --interval=30s --timeout=10s \
+  CMD curl -f http://localhost:5000/health || exit 1

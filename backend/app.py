@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, abort
+from flask import Flask, request, jsonify, abort, send_file
 import requests
 from dotenv import load_dotenv
 import os
@@ -8,6 +8,8 @@ from datetime import datetime
 import traceback
 import json
 from flask_sock import Sock
+import io
+import edge_tts
 
 # 修改后 (直接读取系统环境变量)
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
@@ -226,6 +228,26 @@ def health_check():
             "status": "error",
             "message": str(e)
         }), 500
+
+@app.route('/tts', methods=['POST'])
+def handle_tts():
+    data = request.get_json()
+    if not data or 'text' not in data:
+        return jsonify({"error": "Missing 'text' field"}), 400
+    text = data['text']
+    if not text or len(text) > 500:  # 防止过长的文本
+        return jsonify({"error": "Invalid text"}), 400
+    voice = data.get('voice', "zh-HK-WanLungNeural")
+    try:
+        communicate = edge_tts.Communicate(text, voice)
+        buf = io.BytesIO()
+        for chunk in communicate.stream_sync():
+            if chunk["type"] == "audio":
+                buf.write(chunk["data"])
+        buf.seek(0)
+        return send_file(buf, mimetype='audio/mpeg')
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @sock.route('/ws/chat')
 def chat_socket(ws):

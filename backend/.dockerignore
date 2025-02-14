@@ -1,0 +1,19 @@
+# 忽略版本控制相关
+.git
+.gitignore
+
+# 忽略 Python 缓存
+__pycache__/
+*.py[cod]
+*.pyd
+*.pyo
+
+
+# 忽略 IDE 文件
+.vscode/
+.idea/
+
+
+# 忽略 Docker 自身文件
+Dockerfile
+docker-compose.yml 
